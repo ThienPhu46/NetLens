@@ -1,0 +1,10 @@
+name: arcore_flutter_plugin
+version: 0.1.0
+description: Local copy of arcore_flutter_plugin to patch namespace/ndk issues
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.difrancescogianmarco.arcore_flutter_plugin
+        pluginClass: FlutterPlugin

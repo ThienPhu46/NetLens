@@ -1,0 +1,12 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    // Add namespace required by newer AGP
+    namespace 'com.difrancescogianmarco.arcore_flutter_plugin'
+    compileSdkVersion 33
+}
+
+dependencies {
+}
