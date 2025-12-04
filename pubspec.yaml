@@ -1,0 +1,33 @@
+# pubspec.yaml
+
+name: app_nhan_dien_switch
+description: "Detect Switch using YOLOv11 in AR"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # ĐÃ XÓA: camera (Không dùng cho ARCore)
+  arcore_flutter_plugin: ^0.1.0 # Thư viện AR được yêu cầu
+  
+  # Thư viện nhận diện YOLO (Giữ nguyên)
+  flutter_vision: ^1.0.0
+  # Thư viện xin quyền
+  permission_handler: ^11.3.0
+  screenshot: ^3.0.0 # Thêm cái này để chụp màn hình AR
+  path_provider: ^2.0.15
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/detect.tflite
+    - assets/labelmap.txt
