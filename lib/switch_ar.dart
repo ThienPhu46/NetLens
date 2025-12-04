@@ -58,7 +58,6 @@ class switch_AR extends StatefulWidget {
 
 class _switch_ARState extends State<switch_AR> {
   ArCoreController? arCoreController;
-
   // --- DỮ LIỆU JSON & CÁC BIẾN QUẢN LÝ ---
   SwitchDisplay _visibleSwitch = SwitchDisplay.none;
 
