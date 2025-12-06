@@ -19,15 +19,21 @@ class PortData {
   final int portId;
   final String linkedDevice;
   final int status; // Trạng thái: 1 = Đỏ, 0 = Xanh
+  final int vlan;   // VLAN ID
 
-  PortData({required this.portId, required this.linkedDevice, required this.status});
+  PortData({
+    required this.portId, 
+    required this.linkedDevice, 
+    required this.status,
+    required this.vlan,
+  });
 
   factory PortData.fromJson(Map<String, dynamic> json) {
     return PortData(
       portId: json['portId'] ?? 0,
       linkedDevice: json['linkedDevice'] ?? "",
-      // Chuyển đổi an toàn sang int
       status: int.tryParse(json['Status'].toString()) ?? 0,
+      vlan: int.tryParse(json['Vlan'].toString()) ?? 1,
     );
   }
 }
@@ -58,14 +64,24 @@ class switch_AR extends StatefulWidget {
 
 class _switch_ARState extends State<switch_AR> {
   ArCoreController? arCoreController;
+  
   // --- DỮ LIỆU JSON & CÁC BIẾN QUẢN LÝ ---
   SwitchDisplay _visibleSwitch = SwitchDisplay.none;
+  bool _showVlan = false; 
+
+  // 📍 BẢNG MÀU VLAN
+  final Map<int, Color> _vlanColors = {
+    1: Colors.blue[700]!,       
+    2: Colors.orange[700]!,     
+    3: Colors.green[700]!,      
+    4: Colors.purple[700]!,     
+    5: Colors.yellow[800]!,     
+    6: Colors.red[700]!,        
+    10: Colors.teal[700]!,
+    20: Colors.brown[700]!,
+  };
 
   // Dữ liệu Switch 1
-  // Show Vlan
-  //Show Vlan đổi tên port thành Vlan,
-  //Thêm bảng chú thích màu của các port, vlan, 
-  // Tạo button show vlan. git init
   final String jsonString1 = '''
   {
     "name": "SW Test 1",
@@ -73,29 +89,29 @@ class _switch_ARState extends State<switch_AR> {
     "ip": "192.168.1.1",
     "port": [
       { "portId": 1, "linkedDevice": "CS02-AP-D401","Status": 1, "Vlan": 1 },
-      { "portId": 2, "linkedDevice": "CS02-AP-D402","Status": 1 },
-      { "portId": 3, "linkedDevice": "CS02-AP-D403","Status": 0 },
-      { "portId": 4, "linkedDevice": "CS02-AP-D404","Status": 1 },
-      { "portId": 5, "linkedDevice": "CS02-AP-D405","Status": 0 },
-      { "portId": 6, "linkedDevice": "Camera 2","Status": 1 },
-      { "portId": 7, "linkedDevice": "Printer","Status": 1 },
-      { "portId": 8, "linkedDevice": "Wifi AP","Status": 1 },
-      { "portId": 9, "linkedDevice": "Server","Status": 1 },
-      { "portId": 10, "linkedDevice": "Router","Status": 1 },
-      { "portId": 11, "linkedDevice": "","Status": 1 },
-      { "portId": 12, "linkedDevice": "Device D","Status": 0 },
-      { "portId": 13, "linkedDevice": "Device E","Status": 1 },
-      { "portId": 14, "linkedDevice": "Device F","Status": 1 },
-      { "portId": 15, "linkedDevice": "Device G","Status": 1 },
-      { "portId": 16, "linkedDevice": "Device H","Status": 0 },
-      { "portId": 17, "linkedDevice": "Device I","Status": 1 },
-      { "portId": 18, "linkedDevice": "Device J","Status": 1 },
-      { "portId": 19, "linkedDevice": "Device K","Status": 0 },
-      { "portId": 20, "linkedDevice": "Device L","Status": 1 },
-      { "portId": 21, "linkedDevice": "Device M","Status": 1 },
-      { "portId": 22, "linkedDevice": "Device N","Status": 0 },
-      { "portId": 23, "linkedDevice": "Device O","Status": 1 },
-      { "portId": 24, "linkedDevice": "Device P","Status": 1 }
+      { "portId": 2, "linkedDevice": "CS02-AP-D402","Status": 1, "Vlan": 2 },
+      { "portId": 3, "linkedDevice": "CS02-AP-D403","Status": 0, "Vlan": 4 },
+      { "portId": 4, "linkedDevice": "CS02-AP-D404","Status": 1, "Vlan": 3 },
+      { "portId": 5, "linkedDevice": "CS02-AP-D405","Status": 0, "Vlan": 5 },
+      { "portId": 6, "linkedDevice": "Camera 2","Status": 1, "Vlan": 1 },
+      { "portId": 7, "linkedDevice": "Printer","Status": 1, "Vlan": 2 },
+      { "portId": 8, "linkedDevice": "Wifi AP","Status": 0, "Vlan": 3 },
+      { "portId": 9, "linkedDevice": "Server","Status": 1, "Vlan": 4 },
+      { "portId": 10, "linkedDevice": "Router","Status": 1, "Vlan": 1 },
+      { "portId": 11, "linkedDevice": "","Status": 1, "Vlan": 2 },
+      { "portId": 12, "linkedDevice": "Device D","Status": 0, "Vlan": 3 },
+      { "portId": 13, "linkedDevice": "Device E","Status": 1, "Vlan": 4 },
+      { "portId": 14, "linkedDevice": "Device F","Status": 1, "Vlan": 2 },
+      { "portId": 15, "linkedDevice": "Device G","Status": 1, "Vlan": 3 },
+      { "portId": 16, "linkedDevice": "Device H","Status": 0, "Vlan": 4 },
+      { "portId": 17, "linkedDevice": "Device I","Status": 1, "Vlan": 5 },
+      { "portId": 18, "linkedDevice": "Device J","Status": 1, "Vlan": 6 },
+      { "portId": 19, "linkedDevice": "Device K","Status": 0, "Vlan": 4 },
+      { "portId": 20, "linkedDevice": "Device L","Status": 1, "Vlan": 5 },
+      { "portId": 21, "linkedDevice": "Device M","Status": 1, "Vlan": 6 },
+      { "portId": 22, "linkedDevice": "Device N","Status": 0, "Vlan": 6 },
+      { "portId": 23, "linkedDevice": "Device O","Status": 1, "Vlan": 2 },
+      { "portId": 24, "linkedDevice": "Device P","Status": 1, "Vlan": 1 }
     ]
   }
   ''';
@@ -107,30 +123,30 @@ class _switch_ARState extends State<switch_AR> {
     "model": "Test Model 2",
     "ip": "192.168.2.1",
     "port": [
-      { "portId": 1, "linkedDevice": "S2-Device A", "Status": 1 },
-      { "portId": 2, "linkedDevice": "S2-Device B", "Status": 0 },
-      { "portId": 3, "linkedDevice": "S2-Device C","Status": 1 },
-      { "portId": 4, "linkedDevice": "S2-Device D","Status": 1 },
-      { "portId": 5, "linkedDevice": "S2-Device E","Status": 0 },
-      { "portId": 6, "linkedDevice": "S2-Device F","Status": 1 },
-      { "portId": 7, "linkedDevice": "S2-Device G","Status": 1 },
-      { "portId": 8, "linkedDevice": "S2-Device H","Status": 1 },
-      { "portId": 9, "linkedDevice": "S2-Device I","Status": 1 },
-      { "portId": 10, "linkedDevice": "S2-Device J","Status": 0 },
-      { "portId": 11, "linkedDevice": "S2-Device K","Status": 0 },
-      { "portId": 12, "linkedDevice": "S2-Device L","Status": 0 },
-      { "portId": 13, "linkedDevice": "S2-Device M","Status": 1 },
-      { "portId": 14, "linkedDevice": "S2-Device N","Status": 1 },
-      { "portId": 15, "linkedDevice": "S2-Device O","Status": 1 },
-      { "portId": 16, "linkedDevice": "S2-Device P","Status": 0 },
-      { "portId": 17, "linkedDevice": "S2-Device Q","Status": 1 },
-      { "portId": 18, "linkedDevice": "S2-Device R","Status": 1 },
-      { "portId": 19, "linkedDevice": "S2-Device S","Status": 0 },
-      { "portId": 20, "linkedDevice": "S2-Device T","Status": 1 },
-      { "portId": 21, "linkedDevice": "S2-Device U","Status": 1 },
-      { "portId": 22, "linkedDevice": "S2-Device V","Status": 1 },
-      { "portId": 23, "linkedDevice": "S2-Device W","Status": 0 },
-      { "portId": 24, "linkedDevice": "S2-Device X","Status": 1 }
+      { "portId": 1, "linkedDevice": "S2-Device A", "Status": 1, "Vlan": 1 },
+      { "portId": 2, "linkedDevice": "S2-Device B", "Status": 0, "Vlan": 2 },
+      { "portId": 3, "linkedDevice": "S2-Device C","Status": 1, "Vlan": 3 },
+      { "portId": 4, "linkedDevice": "S2-Device D","Status": 1, "Vlan": 4 },
+      { "portId": 5, "linkedDevice": "S2-Device E","Status": 0, "Vlan": 1 },
+      { "portId": 6, "linkedDevice": "S2-Device F","Status": 1, "Vlan": 6 },
+      { "portId": 7, "linkedDevice": "S2-Device G","Status": 1, "Vlan": 2 },
+      { "portId": 8, "linkedDevice": "S2-Device H","Status": 1, "Vlan": 3 },
+      { "portId": 9, "linkedDevice": "S2-Device I","Status": 1, "Vlan": 4 },
+      { "portId": 10, "linkedDevice": "S2-Device J","Status": 0, "Vlan": 1 },
+      { "portId": 11, "linkedDevice": "S2-Device K","Status": 0, "Vlan": 2 },
+      { "portId": 12, "linkedDevice": "S2-Device L","Status": 0, "Vlan": 3 },
+      { "portId": 13, "linkedDevice": "S2-Device M","Status": 1, "Vlan": 3 },
+      { "portId": 14, "linkedDevice": "S2-Device N","Status": 1, "Vlan": 4 },
+      { "portId": 15, "linkedDevice": "S2-Device O","Status": 1, "Vlan": 4 },
+      { "portId": 16, "linkedDevice": "S2-Device P","Status": 0, "Vlan": 2 },
+      { "portId": 17, "linkedDevice": "S2-Device Q","Status": 1, "Vlan": 3 },
+      { "portId": 18, "linkedDevice": "S2-Device R","Status": 1, "Vlan": 1 },
+      { "portId": 19, "linkedDevice": "S2-Device S","Status": 0, "Vlan": 5 },
+      { "portId": 20, "linkedDevice": "S2-Device T","Status": 1, "Vlan": 3 },
+      { "portId": 21, "linkedDevice": "S2-Device U","Status": 1, "Vlan": 4 },
+      { "portId": 22, "linkedDevice": "S2-Device V","Status": 1, "Vlan": 2 },
+      { "portId": 23, "linkedDevice": "S2-Device W","Status": 0, "Vlan": 1 },
+      { "portId": 24, "linkedDevice": "S2-Device X","Status": 1, "Vlan": 2 }
     ]
   }
   ''';
@@ -138,17 +154,16 @@ class _switch_ARState extends State<switch_AR> {
   late SwitchData switchData1;
   late SwitchData switchData2;
 
-  // --- CÁC BIẾN AR NODE CHO SWITCH 1 ---
+  // --- CÁC BIẾN AR NODE ---
   ArCoreNode? _switchNode1;
   ArCoreNode? _linesNode1;
   ArCoreNode? _labelNode1;
 
-  // --- CÁC BIẾN AR NODE CHO SWITCH 2 ---
   ArCoreNode? _switchNode2;
   ArCoreNode? _linesNode2;
   ArCoreNode? _labelNode2;
   
-  // Cache Texture chung cho 2 switch
+  // Cache Texture
   Uint8List? _panelTextureCache1;
   Uint8List? _linesTextureCache1;
   Uint8List? _labelTextureCache1;
@@ -164,8 +179,8 @@ class _switch_ARState extends State<switch_AR> {
   final double _labelWidth = 0.15;
   final double _labelHeight = 0.04;
   
-  final double _switchGap = 0.25; // Khoảng cách
-  final double _initialZ = -0.3; // Vị trí
+  final double _switchGap = 0.25; 
+  final double _initialZ = -0.3; 
 
   vector64.Vector3 currentPositionValue = vector64.Vector3(0, 0, -0.3); 
   
@@ -214,17 +229,25 @@ class _switch_ARState extends State<switch_AR> {
   void onArCoreViewCreated(ArCoreController controller) async {
     arCoreController = controller;
     
-    // 1. Tạo cache textures cho Switch 1 (TỰ ĐỘNG MÀU THEO STATUS)
+    await _generateTextures();
+    
+    _initNodes();
+  }
+
+  Future<void> _generateTextures() async {
+    // Switch 1
     _panelTextureCache1 = await _createSwitchPanelTexture(
       data: switchData1,
       arWidth: _switchWidth,
       arHeight: _switchHeight,
+      showVlan: _showVlan, 
     );
     _linesTextureCache1 = await _createLinesTexture(
       data: switchData1,
       arWidth: _switchWidth,
       arHeight: _linesHeight,
       arBaseHeight: _switchHeight,
+      showVlan: _showVlan, 
     );
     _labelTextureCache1 = await _createLabelTexture(
       data: switchData1,
@@ -232,32 +255,31 @@ class _switch_ARState extends State<switch_AR> {
       arHeight: _labelHeight,
     );
 
-    // 2. Tạo cache textures cho Switch 2 (TỰ ĐỘNG MÀU THEO STATUS)
+    // Switch 2
     _panelTextureCache2 = await _createSwitchPanelTexture(
       data: switchData2,
       arWidth: _switchWidth,
       arHeight: _switchHeight,
+      showVlan: _showVlan, 
     );
     _linesTextureCache2 = await _createLinesTexture(
       data: switchData2,
       arWidth: _switchWidth,
       arHeight: _linesHeight,
       arBaseHeight: _switchHeight,
+      showVlan: _showVlan,
     );
     _labelTextureCache2 = await _createLabelTexture(
       data: switchData2,
       arWidth: _labelWidth,
       arHeight: _labelHeight,
     );
-    
-    _initNodes();
   }
   
   void _initNodes() {
     final pos1 = vector64.Vector3(0, _switchGap / 2, _initialZ);
     final pos2 = vector64.Vector3(0, -_switchGap / 2, _initialZ);
     
-    // SỬ DỤNG LẠI _createNode (ArCoreCube) với kích thước mỏng
     _switchNode1 = _createNode(name: 'switch_node_1', texture: _panelTextureCache1, position: pos1, size: vector64.Vector3(_switchWidth, _switchHeight, 0.0001));
     _linesNode1 = _createNode(name: 'lines_node_1', texture: _linesTextureCache1, position: vector64.Vector3(pos1.x, pos1.y, pos1.z - 0.0005), size: vector64.Vector3(_switchWidth, _linesHeight, 0.0001));
     _labelNode1 = _createNode(name: 'label_node_1', texture: _labelTextureCache1, position: _getLabelPosition(pos1), size: vector64.Vector3(_labelWidth, _labelHeight, 0.0001));
@@ -267,7 +289,6 @@ class _switch_ARState extends State<switch_AR> {
     _labelNode2 = _createNode(name: 'label_node_2', texture: _labelTextureCache2, position: _getLabelPosition(pos2), size: vector64.Vector3(_labelWidth, _labelHeight, 0.0001));
   }
 
-  // HÀM TẠO NODE BẰNG ArCoreCube (TƯƠNG THÍCH VỚI PHIÊN BẢN CŨ)
   ArCoreNode _createNode({
     required String name,
     required Uint8List? texture,
@@ -276,14 +297,12 @@ class _switch_ARState extends State<switch_AR> {
   }) {
     final material = ArCoreMaterial(
       textureBytes: texture,
-      // Đặt màu vật liệu cơ bản là TRẮNG TRONG SUỐT HOÀN TOÀN
-      color: Colors.white.withOpacity(0.1), 
+      color: Colors.black.withOpacity(0.0),
       metallic: 0.0,
       reflectance: 0.0,
       roughness: 1.0,
     );
 
-    // Sử dụng ArCoreCube
     final shape = ArCoreCube(
       materials: [material],
       size: size,
@@ -304,19 +323,99 @@ class _switch_ARState extends State<switch_AR> {
     );
   }
 
+  void _toggleVlan() async {
+    setState(() {
+      _showVlan = !_showVlan;
+    });
+
+    if (arCoreController == null || _visibleSwitch == SwitchDisplay.none) return;
+
+    // 1. Cập nhật Switch 1
+    if (_visibleSwitch == SwitchDisplay.switch1 || _visibleSwitch == SwitchDisplay.both) {
+        _linesTextureCache1 = await _createLinesTexture(
+          data: switchData1,
+          arWidth: _switchWidth,
+          arHeight: _linesHeight,
+          arBaseHeight: _switchHeight,
+          showVlan: _showVlan,
+        );
+        _updateNodeTexture(node: _linesNode1, texture: _linesTextureCache1, isSwitch1: true, isLinesNode: true);
+
+        _panelTextureCache1 = await _createSwitchPanelTexture(
+          data: switchData1,
+          arWidth: _switchWidth,
+          arHeight: _switchHeight,
+          showVlan: _showVlan, 
+        );
+        _updateNodeTexture(node: _switchNode1, texture: _panelTextureCache1, isSwitch1: true, isLinesNode: false);
+    }
+
+    // 2. Cập nhật Switch 2
+    if (_visibleSwitch == SwitchDisplay.switch2 || _visibleSwitch == SwitchDisplay.both) {
+        _linesTextureCache2 = await _createLinesTexture(
+          data: switchData2,
+          arWidth: _switchWidth,
+          arHeight: _linesHeight,
+          arBaseHeight: _switchHeight,
+          showVlan: _showVlan,
+        );
+        _updateNodeTexture(node: _linesNode2, texture: _linesTextureCache2, isSwitch1: false, isLinesNode: true);
+
+        _panelTextureCache2 = await _createSwitchPanelTexture(
+          data: switchData2,
+          arWidth: _switchWidth,
+          arHeight: _switchHeight,
+          showVlan: _showVlan, 
+        );
+        _updateNodeTexture(node: _switchNode2, texture: _panelTextureCache2, isSwitch1: false, isLinesNode: false);
+    }
+  }
+
+  void _updateNodeTexture({
+    required ArCoreNode? node, 
+    required Uint8List? texture, 
+    required bool isSwitch1,
+    bool isLinesNode = false,
+  }) {
+     if (node != null && texture != null && arCoreController != null) {
+        final oldPosition = node.position?.value ?? vector64.Vector3(0,0,0);
+        final oldName = node.name;
+        final size = (node.shape as ArCoreCube?)?.size ?? vector64.Vector3(0,0,0);
+        
+        if (oldName == null) return; 
+        
+        final newNode = _createNode(
+          name: oldName,
+          texture: texture,
+          position: oldPosition, 
+          size: size
+        );
+
+        _removeNodeByName(oldName);
+        arCoreController!.addArCoreNode(newNode);
+        
+        if (isSwitch1) {
+          if(isLinesNode) _linesNode1 = newNode;
+          else _switchNode1 = newNode; 
+        } else {
+          if(isLinesNode) _linesNode2 = newNode;
+          else _switchNode2 = newNode;
+        }
+     }
+  }
+
+  // 📍 HÀM XỬ LÝ CHUYỂN ĐỔI SWITCH (ĐÃ SỬA ĐỂ RESET VLAN)
   void _updateDisplay(SwitchDisplay newDisplay) async {
     if (arCoreController == null) return;
     
     SwitchDisplay targetDisplay;
 
-    // Toggle logic
     if (_visibleSwitch == newDisplay) {
       targetDisplay = SwitchDisplay.none; 
     } else {
       targetDisplay = newDisplay; 
     }
     
-    // Reset vị trí Z nếu chuyển từ không hiển thị sang hiển thị
     if (targetDisplay != SwitchDisplay.none && _visibleSwitch == SwitchDisplay.none) {
       currentPositionValue = vector64.Vector3(
         currentPositionValue.x, 
@@ -325,8 +424,14 @@ class _switch_ARState extends State<switch_AR> {
       );
     } 
 
-    // Xóa hết rồi vẽ lại
+    // 📍 RESET TRẠNG THÁI VLAN VỀ FALSE
+    _showVlan = false;
+
     _removeAllNodes();
+    
+    // 📍 TẠO LẠI TEXTURE VỚI SHOW VLAN = FALSE
+    await _generateTextures(); 
+
     _initNodes(); 
 
     setState(() {
@@ -385,8 +490,22 @@ class _switch_ARState extends State<switch_AR> {
     }
   }
 
+  // 📍 HÀM LẤY CÁC VLAN ĐANG HIỂN THỊ
+  Set<int> _getActiveVlans() {
+    Set<int> vlans = {};
+    if (_visibleSwitch == SwitchDisplay.switch1 || _visibleSwitch == SwitchDisplay.both) {
+      for (var port in switchData1.ports) vlans.add(port.vlan);
+    }
+    if (_visibleSwitch == SwitchDisplay.switch2 || _visibleSwitch == SwitchDisplay.both) {
+      for (var port in switchData2.ports) vlans.add(port.vlan);
+    }
+    return vlans;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final List<int> sortedVlans = _getActiveVlans().toList()..sort();
+
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -409,7 +528,58 @@ class _switch_ARState extends State<switch_AR> {
             ),
           ),
           
-          // UI Điều khiển (Đã xóa Input và Nút Set Color)
+          // 📍 BẢNG CHÚ THÍCH VLAN
+          if (_showVlan && _visibleSwitch != SwitchDisplay.none)
+            Positioned(
+              top: 50,
+              left: 20,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      "Chú thích VLAN",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    ...sortedVlans.map((vlanId) {
+                      final color = _vlanColors[vlanId] ?? Colors.grey;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: color,
+                                border: Border.all(color: Colors.white),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "Vlan $vlanId",
+                              style: const TextStyle(color: Colors.white, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                ),
+              ),
+            ),
+
           Positioned(
             bottom: 20,
             left: 10,
@@ -420,12 +590,30 @@ class _switch_ARState extends State<switch_AR> {
                 color: Colors.black.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(15),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildSwitchButton(SwitchDisplay.switch1, "Switch 1"),
-                  _buildSwitchButton(SwitchDisplay.switch2, "Switch 2"),
-                  _buildSwitchButton(SwitchDisplay.both, "Cả 2 Switch"),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildSwitchButton(SwitchDisplay.switch1, "Switch 1"),
+                      _buildSwitchButton(SwitchDisplay.switch2, "Switch 2"),
+                      _buildSwitchButton(SwitchDisplay.both, "Cả 2 Switch"),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _toggleVlan,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _showVlan ? Colors.orange.shade800 : Colors.grey.shade700,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text(_showVlan ? "Hide Vlan" : "Show Vlan"),
+                    ),
+                  )
                 ],
               ),
             ),
@@ -448,7 +636,7 @@ class _switch_ARState extends State<switch_AR> {
     );
   }
 
-  // --- HÀM TẠO LABEL TEXTURE (GIỮ TRONG SUỐT) ---
+  // --- HÀM TẠO LABEL TEXTURE ---
   Future<Uint8List> _createLabelTexture({
     required SwitchData data, 
     required double arWidth,
@@ -461,12 +649,13 @@ class _switch_ARState extends State<switch_AR> {
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final ui.Canvas canvas = ui.Canvas(recorder);
 
-    // 1. Đảm bảo nền texture là trong suốt (Clear background)
-    canvas.drawRect(Rect.fromLTWH(0, 0, pixelWidth.toDouble(), pixelHeight.toDouble()), Paint()..blendMode = BlendMode.clear);
-
-    // Đảm bảo không có lệnh vẽ nền mờ đục nào ở đây
-
+    final double labelRadius = 15.0;
+    final Color labelBackgroundColor = const Color(0xFF4A80CC);
     final Color labelTextColor = Colors.white;
+
+    final Rect labelRect = Rect.fromLTWH(0, 0, pixelWidth.toDouble(), pixelHeight.toDouble());
+    final RRect labelRRect = RRect.fromRectAndRadius(labelRect, Radius.circular(labelRadius));
+    canvas.drawRRect(labelRRect, ui.Paint()..color = labelBackgroundColor);
 
     final String line1Text = data.name; 
     final String line2Text = data.ip; 
@@ -495,11 +684,12 @@ class _switch_ARState extends State<switch_AR> {
     return byteData!.buffer.asUint8List();
   }
 
-  // --- 8. HÀM TẠO SWITCH PANEL TEXTURE (GIỮ TRONG SUỐT) ---
+  // --- HÀM TẠO SWITCH PANEL TEXTURE ---
   Future<Uint8List> _createSwitchPanelTexture({
-    required SwitchData data, // Dữ liệu chứa Status
+    required SwitchData data, 
     required double arWidth,
     required double arHeight,
+    required bool showVlan,
   }) async {
 
     final int pixelWidth = 1024;
@@ -515,7 +705,7 @@ class _switch_ARState extends State<switch_AR> {
     final double outerBorderWidth = 3.0;
     final Color innerFillColor = Colors.white.withOpacity(0.0);
     
-    // MÀU SẮC PORT (Status: 1 = Đỏ, 0 = Xanh)
+    // MÀU SẮC PORT MẶC ĐỊNH
     final Color portColorBlue = const Color(0xFF4A80CC); 
     final Color portColorRed = const Color(0xFFD32F2F); 
 
@@ -580,17 +770,24 @@ class _switch_ARState extends State<switch_AR> {
         portPath.lineTo(x, y + latchHeight);
         portPath.close();
 
-        // 🔥 TỰ ĐỘNG CHỌN MÀU DỰA TRÊN STATUS 🔥
+        // 🔥 LOGIC CHỌN MÀU: THEO STATUS HOẶC THEO VLAN 🔥
         final portInfo = data.ports.firstWhere(
           (p) => p.portId == portNumber, 
-          orElse: () => PortData(portId: portNumber, linkedDevice: "", status: 0) // <-- ĐÃ SỬA lỗi
+          orElse: () => PortData(portId: portNumber, linkedDevice: "", status: 0, vlan: 1)
         );
 
         Color currentFillColor;
-        if (portInfo.status == 1) {
-          currentFillColor = portColorRed; 
+
+        if (showVlan) {
+           // Nếu đang Show Vlan -> Lấy màu theo VLAN ID từ bảng màu của class
+           currentFillColor = _vlanColors[portInfo.vlan] ?? Colors.grey; 
         } else {
-          currentFillColor = portColorBlue;
+           // Nếu không Show Vlan -> Lấy màu theo Status
+           if (portInfo.status == 1) {
+             currentFillColor = portColorRed; 
+           } else {
+             currentFillColor = portColorBlue;
+           }
         }
 
         canvas.drawPath(portPath, ui.Paint()..color = currentFillColor);
@@ -654,6 +851,7 @@ class _switch_ARState extends State<switch_AR> {
     required double arWidth,
     required double arHeight, 
     required double arBaseHeight, 
+    required bool showVlan, 
   }) async {
 
     final int pixelWidth = 1024;
@@ -697,7 +895,7 @@ class _switch_ARState extends State<switch_AR> {
 
         final portData = data.ports.firstWhere(
           (p) => p.portId == portNumber,
-          orElse: () => PortData(portId: portNumber, linkedDevice: "", status: 0), // <-- Sửa lỗi PortData
+          orElse: () => PortData(portId: portNumber, linkedDevice: "", status: 0, vlan: 1),
         );
 
         final double lineStartX = x + (portWidth / 2);
@@ -723,9 +921,15 @@ class _switch_ARState extends State<switch_AR> {
           ui.ParagraphStyle(textAlign: TextAlign.start, fontSize: labelTextFontSize, fontWeight: labelFontWeight, height: 1.0));
         pbLabel.pushStyle(ui.TextStyle(color: labelColor));
         
-        String labelText = portData.linkedDevice.isNotEmpty 
-              ? portData.linkedDevice 
-              : "Port $portNumber"; 
+        // 📍 LOGIC HIỂN THỊ TEXT: VLAN HOẶC TÊN THIẾT BỊ
+        String labelText = "";
+        if (showVlan) {
+           labelText = "Vlan: ${portData.vlan}";
+        } else {
+           labelText = portData.linkedDevice.isNotEmpty 
+            ? portData.linkedDevice 
+            : "Port $portNumber"; 
+        }
 
         pbLabel.addText(labelText);
         pbLabel.pop();
@@ -747,7 +951,6 @@ class _switch_ARState extends State<switch_AR> {
           labelDrawY = lineToLabelSpacing; 
         }
         
-        // VẼ TEXT (KHÔNG CÓ NỀN)
         canvas.drawParagraph(pLabel, ui.Offset(labelDrawX, labelDrawY));
 
         canvas.restore(); 
