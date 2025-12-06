@@ -12,14 +12,14 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # ĐÃ XÓA: camera (Không dùng cho ARCore)
-  arcore_flutter_plugin: ^0.1.0 # Thư viện AR được yêu cầu
+  # Giữ nguyên phiên bản cũ để tránh lỗi tương thích
+  arcore_flutter_plugin: ^0.1.0 
   
   # Thư viện nhận diện YOLO (Giữ nguyên)
   flutter_vision: ^1.0.0
   # Thư viện xin quyền
   permission_handler: ^11.3.0
-  screenshot: ^3.0.0 # Thêm cái này để chụp màn hình AR
+  screenshot: ^3.0.0 
   path_provider: ^2.0.15
 dev_dependencies:
   flutter_test:
