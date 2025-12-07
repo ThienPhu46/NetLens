@@ -48,13 +48,13 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
   bool frameVisible = false;
   DateTime lastDetectionTime = DateTime.now();
   
-  // Lưu vị trí ổn định (smoothing)
   vector.Vector3? lastStablePosition;
   int stabilityCounter = 0;
   
-  // Lưu bounding box để vẽ khung 2D
   List<double>? currentBoundingBox;
   double? currentConfidence;
+  
+  String? currentDotName;
 
   @override
   void initState() {
@@ -101,24 +101,21 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
         _captureAndDetect();
       }
     });
-    
-    Timer.periodic(const Duration(milliseconds: 500), (timer) {
-        if (frameVisible && DateTime.now().difference(lastDetectionTime).inSeconds > 3) {
-            if (mounted) _remove3DPoint();
-        }
-    });
   }
 
+// hàm detect và xử lý hình ảnh
   void _captureAndDetect() async { 
     setState(() { isProcessing = true; });
 
     try {
+      // Chụp màn hình
       final Uint8List? imageBytes = await screenshotController.capture(pixelRatio: 1.0); 
       
       if (imageBytes != null) {
         final screenWidth = MediaQuery.of(context).size.width;
         final screenHeight = MediaQuery.of(context).size.height;
 
+        // Chạy YOLO AI để detect
         final results = await vision.yoloOnImage(
           bytesList: imageBytes,
           imageHeight: screenHeight.toInt(),
@@ -132,22 +129,22 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
           if (topResult['tag'] == 'Switch') {
             lastDetectionTime = DateTime.now(); 
             
-            // Lưu bounding box để vẽ khung 2D
+            // Lưu bounding box (khung hình chữ nhật xanh 2D)
             setState(() {
               currentBoundingBox = [
-                topResult['box'][0].toDouble(),
-                topResult['box'][1].toDouble(),
-                topResult['box'][2].toDouble(),
-                topResult['box'][3].toDouble(),
+                topResult['box'][0].toDouble(), // x_min
+                topResult['box'][1].toDouble(), // y_min
+                topResult['box'][2].toDouble(), // x_max
+                topResult['box'][3].toDouble(), // y_max
               ];
               currentConfidence = topResult['box'][4]?.toDouble() ?? 0.0;
               status = "✅ Đã bắt được Switch!";
             });
             
+            // ★ GỌI HÀM TÍNH TỌA ĐỘ 3D ★
             _place3DPoint(topResult['box'], screenWidth, screenHeight); 
           }
         } else {
-          // Xóa khung khi không detect
           setState(() {
             currentBoundingBox = null;
           });
@@ -160,112 +157,98 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
     }
   }
   
-  // ĐẶT CHẤM ĐỎ 3D CHÍNH XÁC + ỔN ĐỊNH
+  // hàm tính vị trí tọa độ  3D từ khung 2D khi đã detect được Switch
   void _place3DPoint(List<dynamic> box, double screenWidth, double screenHeight) {
     if (arCoreController == null) return;
 
-    // === BƯỚC 1: TÍNH KHOẢNG CÁCH (Z) ===
+ // tính khoảng cách Z
     final double boxHeight = (box[3] - box[1]).toDouble();
-    const double REAL_SWITCH_HEIGHT = 0.044;
+    const double REAL_SWITCH_HEIGHT = 0.044; // Chiều cao thực Switch = 44mm
     const double FOV_VERTICAL = 60.0;
     const double FOV_RAD = FOV_VERTICAL * pi / 180.0;
     
+    // Công thức: distance = (chiều cao thực × chiều cao màn hình) / (2 × chiều cao box × tan(FOV/2))
     double distance = (REAL_SWITCH_HEIGHT * screenHeight) / (2 * boxHeight * tan(FOV_RAD / 2));
     distance = distance.clamp(0.3, 5.0);
     
-    // === BƯỚC 2: TÍNH TỌA ĐỘ X, Y ===
-    final double centerX = (box[0] + box[2]) / 2.0;
-    final double centerY = (box[1] + box[3]) / 2.0;
+  // tính tọa độ X,Y 
+    final double centerX = (box[0] + box[2]) / 2.0; // Tâm X của box
+    final double centerY = (box[1] + box[3]) / 2.0; // Tâm Y của box
     
+    // Chuyển pixel → NDC (Normalized Device Coordinates: -1 đến +1)
     final double ndcX = (centerX / screenWidth) * 2.0 - 1.0;
     final double ndcY = -((centerY / screenHeight) * 2.0 - 1.0);
     
+    // Tính FOV ngang
     final double aspectRatio = screenWidth / screenHeight;
     final double fovHorizontal = 2 * atan(tan(FOV_RAD / 2) * aspectRatio);
     
+    // Tính kích thước frustum (hình chóp cụt mà camera nhìn thấy)
     final double frustumHeight = 2.0 * distance * tan(FOV_RAD / 2);
     final double frustumWidth = 2.0 * distance * tan(fovHorizontal / 2);
     
+    // Chuyển NDC → World Space (tọa độ thực trong không gian 3D)
     double worldX = ndcX * (frustumWidth / 2.0);
     double worldY = ndcY * (frustumHeight / 2.0);
-    double worldZ = -distance;
+    double worldZ = -distance; // Âm vì camera nhìn về -Z
     
-    // === HẠ CHẤM ĐỎ XUỐNG THẤP ===
-    worldY -= 0.25; // Hạ xuống 25cm (tăng giá trị này để hạ thêm)
+  // hạ thấp Y xuống 25 cm
+    worldY -= 0.25;
     
-    // === ỔN ĐỊNH VỊ TRÍ (SMOOTHING) ===
     vector.Vector3 newPosition = vector.Vector3(worldX, worldY, worldZ);
     
-    if (lastStablePosition != null) {
-      // Tính khoảng cách di chuyển
-      double deltaDistance = newPosition.distanceTo(lastStablePosition!);
-      
-      // Nếu di chuyển < 5cm thì giữ nguyên vị trí cũ (đứng yên)
-      if (deltaDistance < 0.05) {
-        stabilityCounter++;
-        // Sau 3 lần ổn định liên tiếp thì không cập nhật nữa
-        if (stabilityCounter >= 3 && frameVisible) {
-          return; // GIỮ NGUYÊN - KHÔNG CẬP NHẬT
-        }
-        newPosition = lastStablePosition!; // Dùng vị trí cũ
-      } else {
-        // Nếu di chuyển nhiều thì làm mượt (lerp)
-        stabilityCounter = 0;
-        newPosition = vector.Vector3(
-          lastStablePosition!.x * 0.7 + worldX * 0.3,
-          lastStablePosition!.y * 0.7 + worldY * 0.3,
-          lastStablePosition!.z * 0.7 + worldZ * 0.3,
-        );
-      }
+ // xóa chấm đỏ cũ tạo chấm đỏ mới khi detect được switch khác
+    if (currentDotName != null) {
+      arCoreController!.removeNode(nodeName: currentDotName!);
+      print("🗑️  Đã xóa chấm đỏ cũ: $currentDotName");
     }
     
+    String nodeName = "SwitchDot_${DateTime.now().millisecondsSinceEpoch}";
+    currentDotName = nodeName;
     lastStablePosition = newPosition;
     
-    // === BƯỚC 3: CHỈ TẠO/CẬP NHẬT KHI CẦN ===
-    if (!frameVisible) {
-      // Lần đầu tiên tạo mới
-      arCoreController!.removeNode(nodeName: "SwitchDot");
-      
-      final materialDot = ArCoreMaterial(
-        color: Colors.red,
-        metallic: 1.0,
-      );
-      
-      final sphereShape = ArCoreSphere(
-        materials: [materialDot],
-        radius: 0.02,
-      );
-      
-      final nodeDot = ArCoreNode(
-        name: "SwitchDot", 
-        shape: sphereShape,
-        position: newPosition,
-      );
+    final materialDot = ArCoreMaterial(
+      color: Colors.red,
+      metallic: 1.0,
+    );
+    
+    final sphereShape = ArCoreSphere(
+      materials: [materialDot],
+      radius: 0.025,
+    );
+    
+    // Tạo node 3D tại tọa độ (worldX, worldY, worldZ)
+    final nodeDot = ArCoreNode(
+      name: nodeName, 
+      shape: sphereShape,
+      position: newPosition, // ★ ĐÂY LÀ TỌA ĐỘ CUỐI CÙNG ★
+    );
 
-      arCoreController!.addArCoreNode(nodeDot);
-      frameVisible = true;
-    }
+    arCoreController!.addArCoreNode(nodeDot);
+    frameVisible = true;
     
     setState(() { 
-      status = "🎯 ${distance.toStringAsFixed(2)}m";
+      status = "⚓ Đã neo - ${distance.toStringAsFixed(2)}m";
     });
     
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    print("✅ TỌA ĐỘ 3D (ĐÃ ỔN ĐỊNH):");
+    print("🎯 TẠO CHẤM ĐỎ MỚI: $nodeName");
     print("   X = ${newPosition.x.toStringAsFixed(4)} m");
     print("   Y = ${newPosition.y.toStringAsFixed(4)} m (đã hạ 25cm)");
     print("   Z = ${newPosition.z.toStringAsFixed(4)} m");
-    print("   Ổn định: $stabilityCounter/3");
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   }
 
   void _remove3DPoint() {
     if (frameVisible && arCoreController != null) {
-      arCoreController!.removeNode(nodeName: "SwitchDot");
+      if (currentDotName != null) {
+        arCoreController!.removeNode(nodeName: currentDotName!);
+      }
       frameVisible = false;
       lastStablePosition = null;
       stabilityCounter = 0;
       currentBoundingBox = null;
+      currentDotName = null;
       setState(() { status = "Đang tìm kiếm..."; });
     }
   }
@@ -277,11 +260,14 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
   
   void _clearAllNodes() {
     if (arCoreController != null) {
-      arCoreController!.removeNode(nodeName: "SwitchDot");
+      if (currentDotName != null) {
+        arCoreController!.removeNode(nodeName: currentDotName!);
+      }
       frameVisible = false;
       lastStablePosition = null;
       stabilityCounter = 0;
       currentBoundingBox = null;
+      currentDotName = null;
     }
   }
 
@@ -303,7 +289,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
     return Scaffold(
       body: Stack(
         children: [
-          // Lớp 1: Camera AR
           Screenshot(
             controller: screenshotController,
             child: ArCoreView(
@@ -312,7 +297,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
             ),
           ),
           
-          // Lớp 2: Vẽ Bounding Box 2D
           if (currentBoundingBox != null)
             CustomPaint(
               size: MediaQuery.of(context).size,
@@ -322,7 +306,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
               ),
             ),
           
-          // Lớp 3: Thanh trạng thái
           Positioned(
             top: 50, left: 20, right: 20,
             child: Container(
@@ -357,7 +340,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
             ),
           ),
           
-          // Lớp 4: Tâm ngắm
           Center(
             child: Container(
               width: frameVisible ? 100 : 80,
@@ -381,7 +363,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
             ),
           ),
           
-          // Lớp 5: Hướng dẫn
           Positioned(
             bottom: 40,
             left: 20,
@@ -403,8 +384,8 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
                   const SizedBox(height: 8),
                   Text(
                     frameVisible
-                      ? "✅ Chấm đỏ đã đặt tại vị trí Switch!\n📦 Khung xanh = vị trí detect 2D"
-                      : "🔍 Hướng camera về Switch",
+                      ? "⚓ Chấm đỏ đã neo cố định!\n🔄 Quay camera tìm Switch mới"
+                      : "🔍 Hướng camera về Switch để đặt chấm đỏ",
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 13,
@@ -423,7 +404,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen> with WidgetsBindingObse
   }
 }
 
-// Custom Painter để vẽ Bounding Box 2D
 class BoundingBoxPainter extends CustomPainter {
   final List<double> box;
   final double confidence;
@@ -432,7 +412,6 @@ class BoundingBoxPainter extends CustomPainter {
   
   @override
   void paint(Canvas canvas, Size size) {
-    // Vẽ khung bounding box
     final boxPaint = Paint()
       ..color = Colors.greenAccent
       ..style = PaintingStyle.stroke
@@ -441,22 +420,16 @@ class BoundingBoxPainter extends CustomPainter {
     final rect = Rect.fromLTRB(box[0], box[1], box[2], box[3]);
     canvas.drawRect(rect, boxPaint);
     
-    // Vẽ 4 góc (corner markers)
     final cornerPaint = Paint()
       ..color = Colors.greenAccent
       ..style = PaintingStyle.fill;
     
     final cornerSize = 8.0;
-    // Top-left
     canvas.drawCircle(Offset(box[0], box[1]), cornerSize, cornerPaint);
-    // Top-right
     canvas.drawCircle(Offset(box[2], box[1]), cornerSize, cornerPaint);
-    // Bottom-right
     canvas.drawCircle(Offset(box[2], box[3]), cornerSize, cornerPaint);
-    // Bottom-left
     canvas.drawCircle(Offset(box[0], box[3]), cornerSize, cornerPaint);
     
-    // Vẽ chấm tâm (màu đỏ)
     final centerPaint = Paint()
       ..color = Colors.red
       ..style = PaintingStyle.fill;
@@ -465,14 +438,12 @@ class BoundingBoxPainter extends CustomPainter {
     final centerY = (box[1] + box[3]) / 2;
     canvas.drawCircle(Offset(centerX, centerY), 8, centerPaint);
     
-    // Vẽ viền chấm tâm
     final centerBorderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
     canvas.drawCircle(Offset(centerX, centerY), 8, centerBorderPaint);
     
-    // Vẽ label "Switch" và confidence
     final textPainter = TextPainter(
       text: TextSpan(
         text: 'Switch ${(confidence * 100).toStringAsFixed(0)}%',
@@ -487,10 +458,7 @@ class BoundingBoxPainter extends CustomPainter {
     );
     
     textPainter.layout();
-    textPainter.paint(
-      canvas, 
-      Offset(box[0], box[1] - 25), // Vẽ phía trên khung
-    );
+    textPainter.paint(canvas, Offset(box[0], box[1] - 25));
   }
   
   @override
