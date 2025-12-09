@@ -1,5 +1,3 @@
-# pubspec.yaml
-
 name: app_nhan_dien_switch
 description: "Detect Switch using YOLOv11 in AR"
 publish_to: 'none'
@@ -12,15 +10,21 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # Giữ nguyên phiên bản cũ để tránh lỗi tương thích
+  # AR Core plugin
   arcore_flutter_plugin: ^0.1.0 
   
-  # Thư viện nhận diện YOLO (Giữ nguyên)
+  # YOLO AI detection
   flutter_vision: ^1.0.0
-  # Thư viện xin quyền
+  
+  # Permission handling
   permission_handler: ^11.3.0
+  
+  # Screenshot capture
   screenshot: ^3.0.0 
+  
+  # Path provider
   path_provider: ^2.0.15
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -30,4 +34,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/detect.tflite
-    - assets/labelmap.txt
+    - assets/labelmap.txt 
