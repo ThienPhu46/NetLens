@@ -10,20 +10,28 @@ dependencies:
   flutter:
     sdk: flutter
   
-  # AR Core plugin
+  # AR Core plugin (Giữ nguyên phiên bản cũ 0.1.0)
   arcore_flutter_plugin: ^0.1.0 
   
   # YOLO AI detection
   flutter_vision: ^1.0.0
   
-  # Permission handling
-  permission_handler: ^11.3.0
+  # Permission handling 
+  permission_handler: ^11.3.1
   
   # Screenshot capture
   screenshot: ^3.0.0 
   
   # Path provider
-  path_provider: ^2.0.15
+  path_provider: ^2.1.2 
+  
+  # HTTP client
+  http: ^1.2.0
+  
+  # 📍 THAY THẾ QR SCANNER
+  mobile_scanner: ^5.1.0 # Thư viện mới, dễ tích hợp hơn
+  # qr_code_scanner: ^1.0.1  <-- ĐÃ LOẠI BỎ
+  
 
 dev_dependencies:
   flutter_test:
@@ -34,4 +42,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/detect.tflite
-    - assets/labelmap.txt 
+    - assets/labelmap.txt
