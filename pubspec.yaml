@@ -18,9 +18,11 @@ dependencies:
   
   # Permission handling
   permission_handler: ^11.3.0
-  
+  mobile_scanner: ^5.2.3
   # Screenshot capture
   screenshot: ^3.0.0 
+
+  http: ^1.2.0
   
   # Path provider
   path_provider: ^2.0.15
