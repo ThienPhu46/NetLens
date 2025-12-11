@@ -166,7 +166,7 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 }
 
-// --- MÀN HÌNH AR VỚI REALTIME MƯỢT MÀ ---
+// --- MÀN HÌNH AR REALTIME 1 GIÂY ---
 class ArSwitchScreen extends StatefulWidget {
   final String targetIp;
   const ArSwitchScreen({super.key, required this.targetIp});
@@ -197,21 +197,31 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
   double? currentConfidence;
 
   String? currentBaseName;
+  bool _isUpdatingAr = false;
 
   bool _showVlan = false;
   late SwitchData switchData;
   SwitchData? _previousSwitchData;
 
-  final Map<int, Color> _vlanColors = {
+  // Bảng màu cố định cho các VLAN phổ biến
+  final Map<int, Color> _fixedVlanColors = {
     1: Colors.blue[700]!,
-    2: Colors.orange[700]!,
-    3: Colors.green[700]!,
-    4: Colors.purple[700]!,
-    5: Colors.yellow[800]!,
-    6: Colors.red[700]!,
     10: Colors.teal[700]!,
-    20: Colors.brown[700]!,
+    20: Colors.orange[800]!,
+    30: Colors.purple[700]!,
+    40: Colors.pink[700]!,
+    50: Colors.green[800]!,
+    99: Colors.red[900]!,
+    100: Colors.brown[700]!,
   };
+
+  // Hàm lấy màu động cho VLAN
+  Color _getVlanColor(int vlanId) {
+    if (_fixedVlanColors.containsKey(vlanId)) {
+      return _fixedVlanColors[vlanId]!;
+    }
+    return Colors.primaries[vlanId % Colors.primaries.length];
+  }
 
   Uint8List? _panelTextureCache;
   Uint8List? _linesTextureCache;
@@ -221,7 +231,7 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
   final double _switchHeight = 0.04445;
   final double _linesHeight = 0.04445 * 3.0;
   final double _labelWidth = 0.15;
-  final double _labelHeight = 0.045; 
+  final double _labelHeight = 0.045;
 
   late String _currentTargetIp;
 
@@ -240,7 +250,7 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
   }
 
   void _startApiTimer() {
-    _apiTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    _apiTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (mounted) {
         _fetchSwitchDataFromApi(isBackground: true);
       }
@@ -267,8 +277,9 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
 
     try {
       if (!isBackground) print("📡 Đang gọi API: $apiUrl");
+
       final response =
-          await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 5));
+          await http.get(Uri.parse(apiUrl)).timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200) {
         SwitchData newData =
@@ -290,69 +301,75 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
           });
 
           if (frameVisible && lastStablePosition != null && dataChanged) {
-            await _updateArContentSmoothly();
+            _updateArContentSmoothly();
           }
           if (!isBackground) _checkPermissions();
         }
-      } else {
-        throw Exception("API Error Code: ${response.statusCode}");
       }
     } catch (e) {
-      print("❌ Lỗi API ($e).");
-      if (!isBackground) _useFallbackData();
+      if (!isBackground) {
+        print("❌ Lỗi API ($e).");
+        _useFallbackData();
+      }
     }
   }
 
   Future<void> _updateArContentSmoothly() async {
-    String? oldBaseName = currentBaseName;
-    await _generateSwitchTextures();
-    String newBaseName = "SW_${DateTime.now().millisecondsSinceEpoch}";
-    _spawnArNodesAt(lastStablePosition!, baseName: newBaseName);
-    currentBaseName = newBaseName;
-    await Future.delayed(const Duration(milliseconds: 100));
-    if (oldBaseName != null) {
-      _removeSpecificNodes(oldBaseName);
+    if (_isUpdatingAr) return;
+    _isUpdatingAr = true;
+
+    try {
+      String? oldBaseName = currentBaseName;
+      await _generateSwitchTextures();
+      String newBaseName = "SW_${DateTime.now().millisecondsSinceEpoch}";
+      _spawnArNodesAt(lastStablePosition!, baseName: newBaseName);
+      currentBaseName = newBaseName;
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (oldBaseName != null) {
+        _removeSpecificNodes(oldBaseName);
+      }
+    } catch (e) {
+      print("AR Update Error: $e");
+    } finally {
+      _isUpdatingAr = false;
     }
   }
 
-  // --- HÀM PARSE DỮ LIỆU CẬP NHẬT: NGÀY GIỜ PHÚT GIÂY ---
   SwitchData _parsePrometheusText(String rawText, String targetIp) {
     String switchName = "Unknown Switch";
     String switchIp = targetIp;
     String uptimeStr = "N/A";
     List<PortData> ports = [];
+    
     Map<int, int> portStatusMap = {};
     Map<int, String> portAliasMap = {};
+    Map<int, int> portVlanMap = {};
 
     List<String> lines = const LineSplitter().convert(rawText);
+    
     RegExp nameRegex = RegExp(r'sysName\{sysName="([^"]+)"\}');
     RegExp statusRegex = RegExp(r'ifOperStatus\{.*ifIndex="(\d+)".*\}\s+(\d+)');
     RegExp indexRegex = RegExp(r'ifIndex="(\d+)"');
     RegExp aliasRegex = RegExp(r'ifAlias="([^"]*)"');
-    
-    // Regex lấy số liệu uptime
     RegExp uptimeRegex = RegExp(r'sysUpTime\s+([0-9\.e\+\-]+)');
+    RegExp vlanRegex = RegExp(r'(?:vmVlan|vlan_id|dot1qPvid|pvid).*ifIndex="(\d+)".*\s+(\d+)');
 
     for (var line in lines) {
       if (line.startsWith("#")) continue;
-      
+
       var nameMatch = nameRegex.firstMatch(line);
       if (nameMatch != null) switchName = nameMatch.group(1) ?? "Unknown";
 
-      // LOGIC MỚI: TÍNH TOÁN FULL NGÀY GIỜ PHÚT GIÂY
       var uptimeMatch = uptimeRegex.firstMatch(line);
       if (uptimeMatch != null) {
         try {
           double rawVal = double.parse(uptimeMatch.group(1)!);
-          // 171d 5h 30m 10s
-          int totalSeconds = (rawVal / 100).round(); 
+          int totalSeconds = (rawVal / 100).round();
           Duration dur = Duration(seconds: totalSeconds);
-          
           int days = dur.inDays;
           int hours = dur.inHours % 24;
           int minutes = dur.inMinutes % 60;
           int seconds = dur.inSeconds % 60;
-          
           uptimeStr = "${days}d ${hours}h ${minutes}m ${seconds}s";
         } catch (e) {
           uptimeStr = "Err";
@@ -379,6 +396,15 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
           }
         }
       }
+
+      var vlanMatch = vlanRegex.firstMatch(line);
+      if (vlanMatch != null) {
+        int index = int.parse(vlanMatch.group(1)!);
+        int vlanId = int.parse(vlanMatch.group(2)!);
+        if (index >= 1 && index <= 24) {
+          portVlanMap[index] = vlanId;
+        }
+      }
     }
 
     for (int i = 1; i <= 24; i++) {
@@ -386,10 +412,11 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
         portId: i,
         linkedDevice: portAliasMap[i] ?? "",
         status: portStatusMap[i] ?? 0,
-        vlan: 1,
+        vlan: portVlanMap[i] ?? 1,
       ));
     }
-    return SwitchData(name: switchName, ip: switchIp, uptime: uptimeStr, ports: ports);
+    return SwitchData(
+        name: switchName, ip: switchIp, uptime: uptimeStr, ports: ports);
   }
 
   void _useFallbackData() {
@@ -765,7 +792,7 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
                     ),
                     const SizedBox(height: 8),
                     ...sortedVlans.map((vlanId) {
-                      final color = _vlanColors[vlanId] ?? Colors.grey;
+                      final color = _getVlanColor(vlanId);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
@@ -832,7 +859,6 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
       {required SwitchData data,
       required double arWidth,
       required double arHeight}) async {
-    
     final double aspectRatio = arHeight / arWidth;
     final int pixelWidth = 512;
     final int pixelHeight = (pixelWidth * aspectRatio).round();
@@ -850,7 +876,7 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
     // Dòng 1: Name
     final ui.ParagraphBuilder pbLine1 = ui.ParagraphBuilder(ui.ParagraphStyle(
         textAlign: TextAlign.center,
-        fontSize: pixelHeight * 0.22, 
+        fontSize: pixelHeight * 0.22,
         fontWeight: FontWeight.w600,
         height: 1.0));
     pbLine1.pushStyle(ui.TextStyle(color: labelTextColor));
@@ -871,10 +897,10 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
       ..layout(ui.ParagraphConstraints(width: pixelWidth.toDouble()));
     canvas.drawParagraph(paragraphLine2, ui.Offset(0, pixelHeight * 0.45));
 
-    // Dòng 3: Uptime (Đã giảm font size để chứa chuỗi dài)
+    // Dòng 3: Uptime
     final ui.ParagraphBuilder pbLine3 = ui.ParagraphBuilder(ui.ParagraphStyle(
         textAlign: TextAlign.center,
-        fontSize: pixelHeight * 0.14, // Giảm font size để chứa đủ Ngày Giờ Phút Giây
+        fontSize: pixelHeight * 0.14,
         fontWeight: FontWeight.w400,
         fontStyle: FontStyle.italic,
         height: 1.0));
@@ -890,6 +916,7 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
     return byteData!.buffer.asUint8List();
   }
 
+  // 🔥 UPDATE: MÀU PORT ONLINE/OFFLINE
   Future<Uint8List> _createSwitchPanelTexture(
       {required SwitchData data,
       required double arWidth,
@@ -906,8 +933,11 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
     final Color outerBorderColor = const Color(0xFF000080);
     final double outerBorderWidth = 3.0;
     final Color innerFillColor = Colors.white.withOpacity(0.0);
-    final Color portColorBlue = const Color(0xFF4A80CC);
-    final Color portColorRed = const Color(0xFFD32F2F);
+    
+    // --- KHAI BÁO MÀU MỚI ---
+    final Color portColorOnline = const Color(0xFF00E676); // Xanh lá cây sáng (GreenAccent)
+    final Color portColorOffline = const Color(0xFFD32F2F); // Đỏ đậm (RedAccent)
+    
     final Color portBorderColor = const Color(0xFFADD8E6);
     final Color lightStripeColor = const Color(0xFFFFFFFF).withOpacity(0.7);
     final Color textColor = Colors.white.withOpacity(0.9);
@@ -970,12 +1000,14 @@ class _ArSwitchScreenState extends State<ArSwitchScreen>
         final portInfo = data.ports.firstWhere((p) => p.portId == portNumber,
             orElse: () => PortData(
                 portId: portNumber, linkedDevice: "", status: 0, vlan: 1));
+        
         Color currentFillColor;
         if (showVlan) {
-          currentFillColor = _vlanColors[portInfo.vlan] ?? Colors.grey;
+          currentFillColor = _getVlanColor(portInfo.vlan);
         } else {
+          // 🔥 SỬ DỤNG MÀU MỚI: ONLINE -> XANH LÁ, OFFLINE -> ĐỎ
           currentFillColor =
-              (portInfo.status == 1) ? portColorRed : portColorBlue;
+              (portInfo.status == 1) ? portColorOnline : portColorOffline;
         }
         canvas.drawPath(portPath, ui.Paint()..color = currentFillColor);
         canvas.drawPath(
