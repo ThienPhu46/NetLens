@@ -12,11 +12,12 @@ packages:
   arcore_flutter_plugin:
     dependency: "direct main"
     description:
-      name: arcore_flutter_plugin
-      sha256: "48307e6e630cd991e5b08efd74a0869504631c828d4dc650d144c267a8b6ebfd"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.0"
+      path: "."
+      ref: master
+      resolved-ref: "49e716172807e288a98e02fa7a8c567b57e58b45"
+      url: "https://github.com/giandifra/arcore_flutter_plugin.git"
+    source: git
+    version: "0.1.1"
   args:
     dependency: transitive
     description:

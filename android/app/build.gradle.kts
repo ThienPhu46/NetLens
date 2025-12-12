@@ -5,8 +5,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.h" // (Hoặc tên package của bạn)
-    compileSdk = flutter.compileSdkVersion
+    namespace = "com.example.h"
+    compileSdk = 34 // 🔥 Hardcode 34 cho chắc chắn
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -20,10 +20,11 @@ android {
 
     defaultConfig {
         applicationId = "com.example.h"
-        minSdk = 24 // ARCore yêu cầu tối thiểu 24
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 34 // 🔥 Hardcode 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true // 🔥 Bật Multidex
     }
 
     buildTypes {
@@ -38,11 +39,10 @@ flutter {
 }
 
 dependencies {
-    // Các dependencies khác...
     implementation("com.android.support:multidex:1.0.3")
 }
 
-// --- ĐOẠN CODE FIX LỖI DUPLICATE CLASS (THÊM VÀO ĐÂY) ---
+// --- FIX LỖI DUPLICATE CLASS (Cú pháp Kotlin DSL) ---
 configurations.all {
     exclude(group = "com.google.flatbuffers", module = "flatbuffers-java")
 }
